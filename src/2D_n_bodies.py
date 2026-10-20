@@ -20,7 +20,7 @@ class Grid2D:
 
     @property
     def radius(self):
-        """Mapping mass range to a radius range of (1, 20)"""
+        """Mapping mass range to a radius range of (1, 10)"""
         m = self.mass
         return ((m - 1) / (1000 - 1)) * (10 - 1) + 1
 
@@ -60,14 +60,13 @@ class Grid2D:
         mass_matrix = self.mass[
             np.newaxis, :
         ]  # creates convinient calculation shape (1, N)
-        print("Mass", mass_matrix)
+        
         # we consider vector formula a = G * mass/r^2 * unit_r
         # where unit_r = displacement vector/r = (dx, dy)/r
         # we have dx and dy, and substitute the unit_r in a formula
         # getting a = G * mass/r^2 * ((dx, dy)/r) = G * mass/r^3 * (dx, dy)
         factor = G * mass_matrix / (r**3)
 
-        print(factor)
 
         # Sum forces from all other bodies (axis=1 sums across columns for each body i)
         acc_x = np.sum(factor * dx, axis=1)

@@ -40,10 +40,12 @@ if __name__ == "__main__":
 
     ########## BUT THIS IS MUCH BETTER SoA (structure of arrays over the array of structured as in body_dtype) ###############
 
-    N = 1_000_000_000
+    N = 10
 
     # Separate arrays (Hybrid SoA / Vectorized layout)
     pos = np.zeros((N, 3), dtype=np.float64)  # All positions
     vel = np.zeros((N, 3), dtype=np.float64)  # All velocities
     acc = np.zeros((N, 3), dtype=np.float64)  # All accelerations
     mass = np.zeros(N, dtype=np.float64)        # All masses
+
+    print(pos[0])

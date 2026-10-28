@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 
-from simulation import Grid2D
+from simulation import NBodySim
 
-space = Grid2D(N=100, dt=0.001)
+space = NBodySim(N=100, dt=0.001, dims=2)
 
 plt.ion()
 fig, ax = plt.subplots(figsize=(6, 6))

@@ -29,6 +29,8 @@ def _step(pos, vel, acc, mass, dt):
 def _calculate_acc(pos, acc, mass):
     acc[:] = 0.0
 
+    softening_sq = 0.5
+
     for i in range(len(pos)):
         pos_i = pos[i]
         mass_i = mass[i]
@@ -37,7 +39,7 @@ def _calculate_acc(pos, acc, mass):
             mass_j = mass[j]
 
             r_vec = pos_j - pos_i
-            r_sq = r_vec[0] * r_vec[0] + r_vec[1] * r_vec[1]
+            r_sq = np.dot(r_vec, r_vec) + softening_sq
 
             if r_sq < 0.001:
                 r_sq = 0.001
@@ -50,39 +52,27 @@ def _calculate_acc(pos, acc, mass):
             acc[j] -= mass_i * factor
 
 
-class Grid2D:
-    def __init__(self, N: int, dt: float) -> None:
+class NBodySim:
+    def __init__(self, N: int, dt: float, dims: int) -> None:
         self.dt = dt
+        self.dims = dims
 
         self._initialise_spread_objects(N)
         _calculate_acc(self.pos, self.acc, self.mass)
 
     def _initialise_spread_objects(self, N: int):
         # will be in (x, y) format within these vectors
-        self.pos = np.random.uniform(-15.0, 15.0, size=(N, 2)).astype(np.float64)
-        self.vel = np.random.uniform(-10.0, 10.0, size=(N, 2)).astype(np.float64)
-        self.acc = np.zeros((N, 2), dtype=np.float64)
-        self.mass = np.random.uniform(100.0, 500.0, size=N).astype(np.float64)
+        self.pos = np.random.uniform(-15.0, 15.0, size=(N, self.dims)).astype(
+            np.float64
+        )
+        self.vel = np.random.uniform(0.0, 0.0, size=(N, self.dims)).astype(np.float64)
+        self.acc = np.zeros((N, self.dims), dtype=np.float64)
+        self.mass = np.random.uniform(10.0, 500.0, size=N).astype(np.float64)
 
-        rnd_black_hole = np.random.randint(0, N)
+        rnd_black_hole = np.random.randint(0, 3)
 
-        self.pos[rnd_black_hole] = [110, 110]
-        self.mass[rnd_black_hole] = 1_000_000
-
-
-
-        # TEST N = 2 INITILISATION
-        # self.pos = np.zeros((N, 2), dtype=np.float64)
-        # self.vel = np.zeros((N, 2), dtype=np.float64)
-        # self.acc = np.zeros((N, 2), dtype=np.float64)
-        # self.mass = np.zeros(N, dtype=np.float64)
-
-        # self.pos[0] = [-1, 0]
-        # self.pos[1] = [1, 0]
-        # self.vel[0] = [0, 11]
-        # self.vel[1] = [0, -11]
-
-        # self.mass[0], self.mass[1] = 500, 500
+        self.pos[rnd_black_hole] = np.full(self.dims, 5.0)
+        self.mass[rnd_black_hole] = 10_000
 
     def step(self):
         self.pos, self.vel = _step(self.pos, self.vel, self.acc, self.mass, self.dt)

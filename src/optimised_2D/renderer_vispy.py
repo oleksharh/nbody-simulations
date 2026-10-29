@@ -57,6 +57,7 @@ def run_nbody_simulation(
     n: int,
     dt: float,
     dims: int = 2,
+    R: int = 30,
     frame_dt: float = 0.016,
     save: bool = False,
     **kwargs,
@@ -92,7 +93,7 @@ def run_nbody_simulation(
     view = canvas.central_widget.add_view()
 
     # World setup
-    nbody_sim = NBodySim(N=n, dt=dt, dims=dims)
+    nbody_sim = NBodySim(N=n, dt=dt, dims=dims, R=R)
     face_colors = create_mass_colormap(nbody_sim.mass)
     marker_sizes = calculate_marker_sizes(nbody_sim.mass)
 
@@ -118,6 +119,25 @@ def run_nbody_simulation(
 
     # XYZ axis toggle
     visuals.XYZAxis(parent=view.scene)
+
+    # Circle / Sphere Boundary
+    if dims == 2:
+        boundary_circle = visuals.Ellipse(
+            center=(0, 0),
+            radius=(R, R),  # (radius_x, radius_y)
+            color=(0, 0, 0, 0),  # Transparent fill
+            border_color=(1, 1, 1, 0.5),  # Semi-transparent white border
+            border_width=2.0,
+            parent=view.scene
+        )
+    else:
+        boundary_sphere = visuals.Sphere(
+            radius=R,
+            method='ico',  # icosahedron mesh generation
+            color=(1, 1, 1, 0.05),  # Extremely faint translucent fill
+            edge_color=(1, 1, 1, 0.3),  # Subtle wireframe/edge outline
+            parent=view.scene
+        )
 
     def update_frame(event=None):
         nbody_sim.step()
@@ -153,4 +173,4 @@ if __name__ == "__main__":
     import sys
 
     if sys.flags.interactive != 1:
-        run_nbody_simulation(100, 0.001, dims=3)
+        run_nbody_simulation(1000, 0.001, dims=2, save=False)

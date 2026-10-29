@@ -1,29 +1,6 @@
 from numba import jit
 import numpy as np
 
-import matplotlib.pyplot as plt
-
-
-@jit(nopython=True)
-def _step(pos, vel, acc, mass, dt, R):
-
-    # Calculating positons at t + dt
-    for i in range(len(pos)):
-        pos[i] += vel[i] * dt + 0.5 * acc[i] * dt**2
-
-    # Velocitites at t + dt/2
-    for i in range(len(pos)):
-        vel[i] += 0.5 * acc[i] * dt
-
-    # Calculating accelerations at t + dt
-    _calculate_acc(pos, acc, mass, R)
-
-    # Velocitites at t + dt/2
-    for i in range(len(pos)):
-        vel[i] += 0.5 * acc[i] * dt
-
-    return pos, vel
-
 
 @jit(nopython=True)
 def _calculate_acc(pos, acc, mass, R):
@@ -53,7 +30,7 @@ def _calculate_acc(pos, acc, mass, R):
 
     # Adding soft boundary
     for i in range(len(pos)):
-        k = 1  # stifness coefficient in Fboundry = -k(r- R)*n_vector, where n_vector is pos_vector / r
+        k = 1  # stifness coefficient in F_boundry = -k(r- R)*n_vector, where n_vector is pos_vector / r
 
         r_sq = np.dot(pos[i], pos[i])
         r = np.sqrt(r_sq)
@@ -62,32 +39,85 @@ def _calculate_acc(pos, acc, mass, R):
             hat_n = pos[i] / r
 
             acc[i] -= k * (r - R) * hat_n
+            # mass division is pointless, as heavier objects will
+            # fly further out the boundary - which is not the behaviour I want
+
+
+@jit(nopython=True)
+def _step(pos, vel, acc, mass, dt, R):
+
+    # Calculating positons at t + dt
+    for i in range(len(pos)):
+        pos[i] += vel[i] * dt + 0.5 * acc[i] * dt**2
+
+    # Velocitites at t + dt/2
+    for i in range(len(pos)):
+        vel[i] += 0.5 * acc[i] * dt
+
+    # Calculating accelerations at t + dt
+    _calculate_acc(pos, acc, mass, R)
+
+    # Velocitites at t + dt/2
+    for i in range(len(pos)):
+        vel[i] += 0.5 * acc[i] * dt
+
+    return pos, vel
 
 
 class NBodySim:
     def __init__(self, N: int, dt: float, dims: int, R: int) -> None:
         # R is a soft boundary radius
-
+        self.N = N
         self.dt = dt
         self.dims = dims
         self.R = R
 
-        self._initialise_spread_objects(N)
+        self._initialise_spread_objects()
         _calculate_acc(self.pos, self.acc, self.mass, self.R)
 
-    def _initialise_spread_objects(self, N: int):
-        # will be in (x, y) format within these vectors
-        self.pos = np.random.uniform(-15.0, 15.0, size=(N, self.dims)).astype(
-            np.float64
-        )
+    def _circle_bounding(self):
+        N = self.N
+        theta = np.random.uniform(0, 2 * np.pi, size=N)
+
+        r = self.R * np.sqrt(np.random.uniform(0, 1, size=N))
+
+        x = r * np.cos(theta)
+        y = r * np.sin(theta)
+
+        self.pos = np.column_stack((x, y)).astype(np.float64)
+
+    def _sphere_bounding(self):
+        N = self.N
+        vec = np.random.randn(3, N)
+        vec /= np.linalg.norm(vec, axis=0)  # fit to (0, 1) range
+
+        u = np.random.uniform(0, 1, N)
+        r = self.R * (u ** (1 / 3))
+
+        point_pos = vec * r
+        self.pos = point_pos.T.astype(np.float64)
+
+    def _initialise_spread_objects(self):
+        N = self.N
+        # Position init
+        if self.dims == 2:
+            self._circle_bounding()
+        else:
+            self._sphere_bounding()
+
         self.vel = np.random.uniform(0.0, 0.0, size=(N, self.dims)).astype(np.float64)
         self.acc = np.zeros((N, self.dims), dtype=np.float64)
-        self.mass = np.random.uniform(10.0, 10.0, size=N).astype(np.float64)
+        self.mass = np.random.uniform(320.0, 400.0, size=N).astype(np.float64)
 
-        # rnd_black_hole = np.random.randint(0, 3)
+        rnd_black_hole = np.random.randint(0, N)
 
-        # self.pos[rnd_black_hole] = np.full(self.dims, 5.0)
-        # self.mass[rnd_black_hole] = 10_000
+        self.pos[rnd_black_hole] = np.full(self.dims, 5.0)
+        self.mass[rnd_black_hole] = 100
+
+        rnd_black_hole = np.random.randint(0, N)
+
+        self.pos[rnd_black_hole] = np.full(self.dims, 10.0)
+        self.mass[rnd_black_hole] = 500
 
     def step(self):
         self.pos, self.vel = _step(

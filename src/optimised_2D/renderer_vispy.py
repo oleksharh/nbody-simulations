@@ -54,37 +54,37 @@ def calculate_marker_sizes(masses: np.ndarray) -> np.ndarray:
 
 
 def run_nbody_simulation(
-    n: int,
-    dt: float,
-    dims: int = 2,
-    R: int = 30,
-    frame_dt: float = 0.016,
+    sim: NBodySim,
+    fps: int = 60,
     save: bool = False,
-    **kwargs,
+    out_filename: str = "",
+    duration: int = 60,
 ):
     """Entry point to running the N-body simulation with VisPy rendering.
 
      Parameters
     ----------
-    n : float
-        Number of object/bodies to be in the simulation
-    dt : float
-        Time step value for the simulation engine
-    dims : int
-        Choice of 2D or 3D simulation rendering
-    frame_dt : float
-        Time step for one frame rendering, 16ms by default to make it roughly 60FPS
+    sim: NBodySim
+        Simulation object of the simulation object
+    fps : int
+        FPS rate for the animation 60 by default
     save : bool
         Render and save into out_filename, default is nbody_anim_{n}_{dt}_{dims}D.mp4
     out_filename : str
         Output file name for the save mode instead of real-time rendering,
         default nbody_anim_{n}_{dt}_{dims}D.mp4
-    duration_sec : int
-        Duration of the rendered video in seconds, default 10 secs
+    duration : int
+        Duration of the rendered video in seconds, default 60 secs
     """
-    # Unpack kwargs
-    out_filename = kwargs.get("out_filename", f"nbody_anim_{n}_{dt}_{dims}D.mp4")
-    duration_sec = int(kwargs.get("duration_sec", DEFAULT_DURATION_SEC))
+
+    # Simulation constants
+    N = sim.N
+    DT = sim.dt
+    DIMS = sim.dims
+    R = sim.R  # soft boundary
+
+    if out_filename == "":
+        out_filename = f"nbody_anim_{N}_{DT}_{DIMS}D.mp4"
 
     # Initialising Canvas and View
     canvas = vispy.scene.SceneCanvas(
@@ -93,9 +93,8 @@ def run_nbody_simulation(
     view = canvas.central_widget.add_view()
 
     # World setup
-    nbody_sim = NBodySim(N=n, dt=dt, dims=dims, R=R)
-    face_colors = create_mass_colormap(nbody_sim.mass)
-    marker_sizes = calculate_marker_sizes(nbody_sim.mass)
+    face_colors = create_mass_colormap(sim.mass)
+    marker_sizes = calculate_marker_sizes(sim.mass)
 
     # Scatter plot visuals setup
     scatter = visuals.Markers()
@@ -103,7 +102,7 @@ def run_nbody_simulation(
 
     def update_scatter():
         scatter.set_data(
-            nbody_sim.pos,
+            sim.pos,
             edge_width=0,
             face_color=face_colors,
             size=marker_sizes,
@@ -114,35 +113,37 @@ def run_nbody_simulation(
     view.add(scatter)
 
     # Camera Config
-    view.camera = "panzoom" if dims == 2 else "arcball"
-    view.camera.set_range(x=(-30, 30), y=(-30, 30), margin=0)
+    view.camera = "panzoom" if DIMS == 2 else "arcball"
+    view_rng = (-int(R + 0.1 * R), int(R + 0.1 * R))
+    view.camera.set_range(x=view_rng, y=view_rng, margin=0)
 
     # XYZ axis toggle
     visuals.XYZAxis(parent=view.scene)
 
     # Circle / Sphere Boundary
-    if dims == 2:
+    if DIMS == 2:
         boundary_circle = visuals.Ellipse(
             center=(0, 0),
             radius=(R, R),  # (radius_x, radius_y)
             color=(0, 0, 0, 0),  # Transparent fill
             border_color=(1, 1, 1, 0.5),  # Semi-transparent white border
             border_width=2.0,
-            parent=view.scene
+            parent=view.scene,
         )
     else:
         boundary_sphere = visuals.Sphere(
             radius=R,
-            method='ico',  # icosahedron mesh generation
+            method="ico",  # icosahedron mesh generation
             color=(1, 1, 1, 0.05),  # Extremely faint translucent fill
             edge_color=(1, 1, 1, 0.3),  # Subtle wireframe/edge outline
-            parent=view.scene
+            parent=view.scene,
         )
 
     def update_frame(event=None):
-        nbody_sim.step()
+        sim.step()
+
         scatter.set_data(
-            nbody_sim.pos,
+            sim.pos,
             edge_width=0,
             face_color=face_colors,
             size=marker_sizes,
@@ -151,13 +152,14 @@ def run_nbody_simulation(
 
     if not save:
         print("Running live interactive simulation...")
-        timer = app.Timer(interval=frame_dt, connect=update_frame, start=True)
+        framde_dt = int(1 / fps)
+        timer = app.Timer(interval=framde_dt, connect=update_frame, start=True)
         vispy.app.run()
     else:
         os.makedirs("static", exist_ok=True)
         filepath = os.path.join("static", out_filename)
-        writer = imageio.get_writer(filepath, fps=int(1 / frame_dt))
-        total_frames = int(duration_sec / frame_dt)
+        writer = imageio.get_writer(filepath, fps=fps)
+        total_frames = int(fps * duration)
 
         print(f"Rendering {total_frames} frames offscreen to {filepath}...")
         for _ in range(total_frames):
@@ -173,4 +175,5 @@ if __name__ == "__main__":
     import sys
 
     if sys.flags.interactive != 1:
-        run_nbody_simulation(1000, 0.001, dims=2, save=False)
+        sim = NBodySim(N=100, dt=0.001, dims=2, R=50)
+        run_nbody_simulation(sim=sim, save=False)

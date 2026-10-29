@@ -126,12 +126,7 @@ class NBodySim:
         return np.column_stack((vx, vy)).astype(np.float64)
 
     def _default_masses(self):
-        # Discretized Power-Law (IMF-style)
-        mass_min, mass_max, alpha = 1.0, 2.0, 2.35
-        u = np.random.uniform(0, 1, self.N)
-        term = mass_max**(1.0 - alpha) - mass_min**(1.0 - alpha)
-        
-        return (mass_min**(1.0 - alpha) + term * u) ** (1.0 / (1.0 - alpha))
+        return np.full(shape=self.N, fill_value=1.0)
 
 
     def circle_bounding(self):
@@ -166,3 +161,4 @@ class NBodySim:
 # TODO: 2) decide between Plummer-style gravitational softening or clumping method that was before
 # TODO: 3) Rewrite default initial setup, as this one is still chaotic
 # TODO: 4) Add docstring for NBodySim init method
+# TODO: 5) Implement Barnes Hut algorithm

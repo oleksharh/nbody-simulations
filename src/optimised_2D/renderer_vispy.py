@@ -28,6 +28,9 @@ def create_mass_colormap(masses: np.ndarray):
 
 
 def calculate_marker_sizes(masses: np.ndarray) -> np.ndarray:
+    if masses.min() == masses.max():
+        return np.full_like(masses, 3.0, dtype=float)
+
     log_masses = np.log10(masses)
     log_min = np.log10(masses.min())
     mid_mass = (masses.min() + masses.max()) / 2

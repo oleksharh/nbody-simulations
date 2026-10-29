@@ -9,17 +9,16 @@ from vispy import app
 from simulation import NBodySim
 
 CANVAS_SIZE = (512, 512)
-DEFAULT_DURATION_SEC = 10
-MASS_REGULAR_THRESHOLD = 500
-MASS_MIN = 100
-MASS_MAX = 10000
 
 
 def create_mass_colormap(masses: np.ndarray):
+    if masses.min() == masses.max():
+        return mcolors.to_rgba("deepskyblue")
+
     cmap_colors = [
         (0.00, "red"),
         (0.33, "yellow"),
-        (0.66, "blue"),
+        (0.66, "deepskyblue"),
         (1.00, "white"),
     ]
     custom_cmap = mcolors.LinearSegmentedColormap.from_list("mass_custom", cmap_colors)
@@ -30,13 +29,14 @@ def create_mass_colormap(masses: np.ndarray):
 
 def calculate_marker_sizes(masses: np.ndarray) -> np.ndarray:
     log_masses = np.log10(masses)
-    log_min = np.log10(MASS_MIN)
-    log_mid = np.log10(MASS_REGULAR_THRESHOLD)
-    log_max = np.log10(MASS_MAX)
+    log_min = np.log10(masses.min())
+    mid_mass = (masses.min() + masses.max()) / 2
+    log_mid = np.log10(mid_mass)
+    log_max = np.log10(masses.max())
 
     marker_sizes = np.empty_like(masses, dtype=float)
-    regular_mask = masses <= MASS_REGULAR_THRESHOLD
-    outlier_mask = masses > MASS_REGULAR_THRESHOLD
+    regular_mask = masses <= mid_mass
+    outlier_mask = masses > mid_mass
 
     if np.any(regular_mask):
         norm_reg = np.clip(
@@ -56,6 +56,7 @@ def calculate_marker_sizes(masses: np.ndarray) -> np.ndarray:
 def run_nbody_simulation(
     sim: NBodySim,
     fps: int = 60,
+    render_decoupl_rng: int = 5,
     save: bool = False,
     out_filename: str = "",
     duration: int = 60,
@@ -68,6 +69,8 @@ def run_nbody_simulation(
         Simulation object of the simulation object
     fps : int
         FPS rate for the animation 60 by default
+    render_decoupl_rng : int
+        How many time steps the world makes to be completed between frames
     save : bool
         Render and save into out_filename, default is nbody_anim_{n}_{dt}_{dims}D.mp4
     out_filename : str
@@ -140,7 +143,8 @@ def run_nbody_simulation(
         )
 
     def update_frame(event=None):
-        sim.step()
+        for _ in range(render_decoupl_rng):
+            sim.step()
 
         scatter.set_data(
             sim.pos,
@@ -152,7 +156,7 @@ def run_nbody_simulation(
 
     if not save:
         print("Running live interactive simulation...")
-        framde_dt = int(1 / fps)
+        framde_dt = 1.0 / fps
         timer = app.Timer(interval=framde_dt, connect=update_frame, start=True)
         vispy.app.run()
     else:
@@ -177,3 +181,6 @@ if __name__ == "__main__":
     if sys.flags.interactive != 1:
         sim = NBodySim(N=100, dt=0.001, dims=2, R=50)
         run_nbody_simulation(sim=sim, save=False)
+
+
+# TODO: Fix colormapping and allow colormapping to be customised and passed by the user as an arg

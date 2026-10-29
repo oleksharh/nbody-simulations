@@ -1,12 +1,11 @@
 from numba import jit
 import numpy as np
+from typing import Callable
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _calculate_acc(pos, acc, mass, R):
     acc[:] = 0.0
-
-    epsilon = 0.1
 
     for i in range(len(pos)):
         pos_i = pos[i]
@@ -18,12 +17,15 @@ def _calculate_acc(pos, acc, mass, R):
             r_vec = pos_j - pos_i
             r_sq = np.dot(r_vec, r_vec)
 
-            if r_sq < 0.001:
-                r_sq = 0.001
+            # if r_sq < 0.001:
+            #     r_sq = 0.001
 
-            r = np.sqrt(r_sq)  # displacement distance
+            # r = np.sqrt(r_sq)  # displacement distance
 
-            factor = r_vec / (r_sq * r + epsilon)
+
+            epsilon = 0.5
+            # factor = r_vec / (r_sq * r + epsilon)
+            factor = r_vec / (r_sq + epsilon**2) ** 1.5
 
             acc[i] += mass_j * factor
             acc[j] -= mass_i * factor
@@ -43,7 +45,7 @@ def _calculate_acc(pos, acc, mass, R):
             # fly further out the boundary - which is not the behaviour I want
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _step(pos, vel, acc, mass, dt, R):
 
     # Calculating positons at t + dt
@@ -65,17 +67,74 @@ def _step(pos, vel, acc, mass, dt, R):
 
 
 class NBodySim:
-    def __init__(self, N: int, dt: float, dims: int, R: int) -> None:
+    def __init__(
+        self,
+        N: int,
+        dt: float,
+        dims: int,
+        R: int,
+        pos_func=None,
+        vel_func=None,
+        mass_func=None,
+    ) -> None:
         # R is a soft boundary radius
         self.N = N
         self.dt = dt
         self.dims = dims
         self.R = R
 
-        self._initialise_spread_objects()
+        if dims not in (2, 3):
+            raise ValueError("dims argument must be 2 or 3")
+
+        self.pos = pos_func(self) if pos_func else self._default_positions()
+        self.mass = mass_func(self) if mass_func else self._default_masses()
+        self.vel = vel_func(self) if vel_func else self._default_velocities()
+
+        self.acc = np.zeros_like(self.pos) # same as np.zeros((self.N, self.dims), dtype=np.float64)
+
         _calculate_acc(self.pos, self.acc, self.mass, self.R)
 
-    def _circle_bounding(self):
+    def _default_positions(self):
+        if self.dims == 2:
+            return self.circle_bounding()
+
+        return self.sphere_bounding()
+
+    def _default_velocities(self):
+        if self.dims != 2:
+            return np.zeros(
+                (self.N, self.dims), dtype=np.float64
+            )
+
+        x = self.pos[:, 0]
+        y = self.pos[:, 1]
+        radius = np.hypot(x, y)
+
+        rotation_scale = 0.8
+
+        # Approximation for a uniform surface-density disc.
+        enclosed_mass = self.mass.sum() * (radius / self.R) ** 2
+
+        safe_radius = np.maximum(radius, 1e-8)
+        speed = rotation_scale * np.sqrt(
+            enclosed_mass / safe_radius
+        )
+
+        vx = -y / safe_radius * speed
+        vy = x / safe_radius * speed
+
+        return np.column_stack((vx, vy)).astype(np.float64)
+
+    def _default_masses(self):
+        # Discretized Power-Law (IMF-style)
+        mass_min, mass_max, alpha = 1.0, 2.0, 2.35
+        u = np.random.uniform(0, 1, self.N)
+        term = mass_max**(1.0 - alpha) - mass_min**(1.0 - alpha)
+        
+        return (mass_min**(1.0 - alpha) + term * u) ** (1.0 / (1.0 - alpha))
+
+
+    def circle_bounding(self):
         N = self.N
         theta = np.random.uniform(0, 2 * np.pi, size=N)
 
@@ -84,9 +143,9 @@ class NBodySim:
         x = r * np.cos(theta)
         y = r * np.sin(theta)
 
-        self.pos = np.column_stack((x, y)).astype(np.float64)
+        return np.column_stack((x, y)).astype(np.float64)
 
-    def _sphere_bounding(self):
+    def sphere_bounding(self):
         N = self.N
         vec = np.random.randn(3, N)
         vec /= np.linalg.norm(vec, axis=0)  # fit to (0, 1) range
@@ -95,29 +154,7 @@ class NBodySim:
         r = self.R * (u ** (1 / 3))
 
         point_pos = vec * r
-        self.pos = point_pos.T.astype(np.float64)
-
-    def _initialise_spread_objects(self):
-        N = self.N
-        # Position init
-        if self.dims == 2:
-            self._circle_bounding()
-        else:
-            self._sphere_bounding()
-
-        self.vel = np.random.uniform(0.0, 0.0, size=(N, self.dims)).astype(np.float64)
-        self.acc = np.zeros((N, self.dims), dtype=np.float64)
-        self.mass = np.random.uniform(320.0, 400.0, size=N).astype(np.float64)
-
-        rnd_black_hole = np.random.randint(0, N)
-
-        self.pos[rnd_black_hole] = np.full(self.dims, 5.0)
-        self.mass[rnd_black_hole] = 100
-
-        rnd_black_hole = np.random.randint(0, N)
-
-        self.pos[rnd_black_hole] = np.full(self.dims, 10.0)
-        self.mass[rnd_black_hole] = 500
+        return point_pos.T.astype(np.float64)
 
     def step(self):
         self.pos, self.vel = _step(
@@ -126,3 +163,6 @@ class NBodySim:
 
 
 # TODO: 1) Add different interesting initialisation setups
+# TODO: 2) decide between Plummer-style gravitational softening or clumping method that was before
+# TODO: 3) Rewrite default initial setup, as this one is still chaotic
+# TODO: 4) Add docstring for NBodySim init method

@@ -6,7 +6,7 @@ import matplotlib.colors as mcolors
 import vispy.scene
 from vispy.scene import visuals
 from vispy import app
-from simulation import NBodySim
+from simulation import Simulation, NBodySim
 
 CANVAS_SIZE = (512, 512)
 
@@ -57,7 +57,7 @@ def calculate_marker_sizes(masses: np.ndarray) -> np.ndarray:
 
 
 def run_nbody_simulation(
-    sim: NBodySim,
+    sim: Simulation,
     fps: int = 60,
     render_decoupl_rng: int = 5,
     save: bool = False,
@@ -68,7 +68,7 @@ def run_nbody_simulation(
 
      Parameters
     ----------
-    sim: NBodySim
+    sim: Simulation
         Simulation object of the simulation object
     fps : int
         FPS rate for the animation 60 by default
@@ -99,8 +99,8 @@ def run_nbody_simulation(
     view = canvas.central_widget.add_view()
 
     # World setup
-    face_colors = create_mass_colormap(sim.mass)
-    marker_sizes = calculate_marker_sizes(sim.mass)
+    face_colors = create_mass_colormap(sim.masses)
+    marker_sizes = calculate_marker_sizes(sim.masses)
 
     # Scatter plot visuals setup
     scatter = visuals.Markers()

@@ -14,6 +14,16 @@ MassFunc = Callable[["Simulation"], Vec1D]
 
 
 class Simulation(ABC):
+    """
+    Parameters
+    ----------
+    N: int
+        Bodies quantity
+    dt: float
+        time delta
+
+    """
+
     N: int
     dt: float
     dims: int
@@ -21,7 +31,7 @@ class Simulation(ABC):
     pos: Vec2D
     vel: Vec2D
     acc: Vec2D
-    mass: Vec1D
+    masses: Vec1D
 
     def __init__(
         self,
@@ -33,6 +43,7 @@ class Simulation(ABC):
         vel_func: Optional[VelFunc] = None,
         mass_func: Optional[MassFunc] = None,
     ) -> None:
+
         if dims not in (2, 3):
             raise ValueError("dims argument must be 2 or 3")
         self.N = N
@@ -41,7 +52,7 @@ class Simulation(ABC):
         self.R = R
 
         self.pos = pos_func(self) if pos_func else self._default_positions()
-        self.mass = mass_func(self) if mass_func else self._default_masses()
+        self.masses = mass_func(self) if mass_func else self._default_masses()
         self.vel = vel_func(self) if vel_func else self._default_velocities()
 
         self.acc = np.zeros_like(
@@ -65,7 +76,7 @@ class Simulation(ABC):
         rotation_scale = 0.8
 
         # Approximation for a uniform surface-density disc.
-        enclosed_mass = self.mass.sum() * (radius / self.R) ** 2
+        enclosed_mass = self.masses.sum() * (radius / self.R) ** 2
 
         safe_radius = np.maximum(radius, 1e-8)
         speed = rotation_scale * np.sqrt(enclosed_mass / safe_radius)
@@ -135,8 +146,7 @@ def _calculate_acc(pos, acc, mass, R):
     for i in range(len(pos)):
         k = 1  # stifness coefficient in F_boundry = -k(r- R)*n_vector, where n_vector is pos_vector / r
 
-        r_sq = np.dot(pos[i], pos[i])
-        r = np.sqrt(r_sq)
+        r = np.linalg.norm(pos[i]) # euclidian norm, distnace
 
         if r >= R:
             hat_n = pos[i] / r
@@ -181,11 +191,11 @@ class NBodySim(Simulation):
         # R is a soft boundary radius
         super().__init__(N, dt, dims, R, pos_func, vel_func, mass_func)
 
-        _calculate_acc(self.pos, self.acc, self.mass, self.R)
+        _calculate_acc(self.pos, self.acc, self.masses, self.R)
 
     def step(self):
         self.pos, self.vel = _step(
-            self.pos, self.vel, self.acc, self.mass, self.dt, self.R
+            self.pos, self.vel, self.acc, self.masses, self.dt, self.R
         )
 
 
@@ -193,4 +203,3 @@ class NBodySim(Simulation):
 # TODO: 2) decide between Plummer-style gravitational softening or clumping method that was before
 # TODO: 3) Rewrite default initial setup, as this one is still chaotic
 # TODO: 4) Add docstring for NBodySim init method
-# TODO: 5) Implement Barnes Hut algorithm

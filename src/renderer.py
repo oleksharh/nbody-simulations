@@ -6,9 +6,10 @@ import matplotlib.colors as mcolors
 import vispy.scene
 from vispy.scene import visuals
 from vispy import app
-from simulation import Simulation, NBodySim
+from simulation import Simulation
 
 CANVAS_SIZE = (512, 512)
+
 
 def create_mass_colormap(masses: np.ndarray):
     if masses.min() == masses.max():
@@ -63,7 +64,7 @@ def run_nbody_simulation(
     out_filename: str = "",
     duration: int = 60,
     bounds: bool = True,
-    canvas_size: tuple = (512, 512)
+    canvas_size: tuple = (512, 512),
 ):
     """Entry point to running the N-body simulation with VisPy rendering.
 
@@ -126,19 +127,22 @@ def run_nbody_simulation(
     view.camera = "panzoom" if DIMS == 2 else "arcball"
     if DIMS == 2:
         view_rng = (-int(R + 0.1 * R), int(R + 0.1 * R))
-        view.camera.set_range(x=view_rng, y=view_rng, margin=(R / (10 * DIMS)))
+        view.camera.set_range(x=view_rng, y=view_rng)
 
-    # XYZ axis toggle
-    visuals.XYZAxis(parent=view.scene)
+    view.camera.aspect = 1
+
+    if DIMS == 3:
+        # XYZ axis toggle
+        visuals.XYZAxis(parent=view.scene)
 
     # Circle / Sphere Boundary
-    if bounds: 
+    if bounds:
         if DIMS == 2:
             boundary_circle = visuals.Ellipse(
                 center=(0, 0),
                 radius=(R, R),  # (radius_x, radius_y)
                 color=(0, 0, 0, 0),  # Transparent fill
-                border_color=(1, 1, 1, 0.5),  # Semi-transparent white border
+                border_color=(1, 1, 1, 0.2),  # Semi-transparent white border
                 border_width=2.0,
                 parent=view.scene,
             )
@@ -188,7 +192,9 @@ if __name__ == "__main__":
     import sys
 
     if sys.flags.interactive != 1:
-        sim = NBodySim(N=100, dt=0.001, dims=2, R=50)
+        from vel_verlet import VelVerletSim
+
+        sim = VelVerletSim(N=100, dt=0.001, dims=2, R=50)
         run_nbody_simulation(sim=sim, save=False)
 
 

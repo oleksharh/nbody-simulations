@@ -63,7 +63,7 @@ class BarnesHutSim(Simulation):
         )
         child = Node(centre_pos, new_half, node.depth + 1)
         node.children[c] = child
-        return child
+        return child # redundant perhaps, if not used 
 
     def _insert(self, node: Node, i: int) -> None:
         if node.is_leaf and node.body is None:

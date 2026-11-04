@@ -10,7 +10,6 @@ from simulation import Simulation, NBodySim
 
 CANVAS_SIZE = (512, 512)
 
-
 def create_mass_colormap(masses: np.ndarray):
     if masses.min() == masses.max():
         return mcolors.to_rgba("deepskyblue")
@@ -63,6 +62,8 @@ def run_nbody_simulation(
     save: bool = False,
     out_filename: str = "",
     duration: int = 60,
+    bounds: bool = True,
+    canvas_size: tuple = (512, 512)
 ):
     """Entry point to running the N-body simulation with VisPy rendering.
 
@@ -81,6 +82,8 @@ def run_nbody_simulation(
         default nbody_anim_{n}_{dt}_{dims}D.mp4
     duration : int
         Duration of the rendered video in seconds, default 60 secs
+    bounds : bool
+        Toggle switch for the boundaries of the initial bounding of bodies
     """
 
     # Simulation constants
@@ -88,6 +91,7 @@ def run_nbody_simulation(
     DT = sim.dt
     DIMS = sim.dims
     R = sim.R  # soft boundary
+    CANVAS_SIZE = canvas_size
 
     if out_filename == "":
         out_filename = f"nbody_anim_{N}_{DT}_{DIMS}D.mp4"
@@ -120,30 +124,32 @@ def run_nbody_simulation(
 
     # Camera Config
     view.camera = "panzoom" if DIMS == 2 else "arcball"
-    view_rng = (-int(R + 0.1 * R), int(R + 0.1 * R))
-    view.camera.set_range(x=view_rng, y=view_rng, margin=0)
+    if DIMS == 2:
+        view_rng = (-int(R + 0.1 * R), int(R + 0.1 * R))
+        view.camera.set_range(x=view_rng, y=view_rng, margin=(R / (10 * DIMS)))
 
     # XYZ axis toggle
     visuals.XYZAxis(parent=view.scene)
 
     # Circle / Sphere Boundary
-    if DIMS == 2:
-        boundary_circle = visuals.Ellipse(
-            center=(0, 0),
-            radius=(R, R),  # (radius_x, radius_y)
-            color=(0, 0, 0, 0),  # Transparent fill
-            border_color=(1, 1, 1, 0.5),  # Semi-transparent white border
-            border_width=2.0,
-            parent=view.scene,
-        )
-    else:
-        boundary_sphere = visuals.Sphere(
-            radius=R,
-            method="ico",  # icosahedron mesh generation
-            color=(1, 1, 1, 0.05),  # Extremely faint translucent fill
-            edge_color=(1, 1, 1, 0.3),  # Subtle wireframe/edge outline
-            parent=view.scene,
-        )
+    if bounds: 
+        if DIMS == 2:
+            boundary_circle = visuals.Ellipse(
+                center=(0, 0),
+                radius=(R, R),  # (radius_x, radius_y)
+                color=(0, 0, 0, 0),  # Transparent fill
+                border_color=(1, 1, 1, 0.5),  # Semi-transparent white border
+                border_width=2.0,
+                parent=view.scene,
+            )
+        else:
+            boundary_sphere = visuals.Sphere(
+                radius=R,
+                method="ico",  # icosahedron mesh generation
+                color=(1, 1, 1, 0.0),  # Extremely faint translucent fill
+                edge_color=(1, 1, 1, 0.03),  # Subtle wireframe/edge outline
+                parent=view.scene,
+            )
 
     def update_frame(event=None):
         for _ in range(render_decoupl_rng):
@@ -163,8 +169,8 @@ def run_nbody_simulation(
         timer = app.Timer(interval=framde_dt, connect=update_frame, start=True)
         vispy.app.run()
     else:
-        os.makedirs("static", exist_ok=True)
-        filepath = os.path.join("static", out_filename)
+        os.makedirs("media_assets", exist_ok=True)
+        filepath = os.path.join("media_assets", out_filename)
         writer = imageio.get_writer(filepath, fps=fps)
         total_frames = int(fps * duration)
 

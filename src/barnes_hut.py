@@ -68,7 +68,7 @@ class BarnesHutSim(Simulation):
     def _insert(self, node: Node, i: int) -> None:
         if node.is_leaf and node.body is None:
             node.body = i
-            node.mass = float(self.masses[i])
+            node.mass = self.masses[i]
             node.com_pos = self.pos[i].copy()
 
             return

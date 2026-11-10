@@ -1,23 +1,63 @@
 import numpy as np
-import numba as nmb
 from numpy import int8, int64, float64
 from numba import njit, prange
-from typing import Any, Callable, NamedTuple
+from typing import NamedTuple, Optional
+
+from type_defs import (
+    Float64Vec1D,
+    Float64Vec2D,
+    Float64Vec3D,
+    Int64Vec1D,
+    Int8Vec1D,
+    BoolVec1D,
+    Int64Vec4D,
+)
 
 
 class QuadTree(NamedTuple):
-    size: np.ndarray           # shape (1,), int64 - nodes populated
-    half: np.ndarray           # (max_nodes,) float64 
-    center_pos: np.ndarray     # (max_nodes, 2) float64
-    depth: np.ndarray          # (max_nodes,) int8
-    mass: np.ndarray           # (max_nodes,) float64
-    com_pos: np.ndarray        # (max_nodes, 2) float64
-    is_leaf: np.ndarray        # (max_nodes,) bool True by default
-    body_idx: np.ndarray       # (max_nodes,) int64    -1 means no body index reference is present
-    child_indices: np.ndarray  # (max_nodes, 4) int64  -1 means no body index reference is present
+    """
+    Helper Typing class for QuadTree Structure of Arrays
+
+    Parameters
+    ----------
+    size : Int64Vec1D
+        shape (1,), int64 - nodes populated as ndarray only because int would be immutable once compiled
+    half : Float64Vec1D
+        (max_nodes,) float64
+    center_pos : Float64Vec2D
+        (max_nodes, 2) float64
+    depth : Int8Vec1D
+        (max_nodes,) int8
+    mass : Float64Vec1D
+        (max_nodes,) float64
+    com_pos : Float64Vec2D
+        (max_nodes, 2) float64
+    is_leaf : BoolVec1D
+        (max_nodes,) bool True by default
+    body_idx : Int64Vec1D
+        (max_nodes,) int64    -1 means no body index reference is present
+    child_indices : Int64Vec4D
+        (max_nodes, 4) int64  -1 means no body index reference is present
+
+    """
+
+    size: Int64Vec1D
+    half: Float64Vec1D
+    center_pos: Float64Vec2D
+    depth: Int8Vec1D
+    mass: Float64Vec1D
+    com_pos: Float64Vec2D
+    is_leaf: BoolVec1D
+    body_idx: Int64Vec1D
+    child_indices: Int64Vec4D
 
 
-def zeros_tree(max_nodes: int):
+def zeros_tree(max_nodes: int) -> QuadTree:
+    """
+    Initialises QuadTree SoA to initial values,
+    essentially allocates arrays in memory and 
+    returns QuadTree object
+    """
     return QuadTree(
         size=np.zeros(1, dtype=int64),  # currently existing nodes
         half=np.zeros(max_nodes, dtype=float64),
@@ -39,7 +79,11 @@ def zeros_tree(max_nodes: int):
 
 
 @njit
-def get_square_values(positions):
+def get_square_values(positions: Float64Vec2D):
+    """
+    Find the longest possible distance vector of distnat objects and
+    generates square center coordinates and it's half value of width
+    """
     min_x = positions[:, 0].min()
     max_x = positions[:, 0].max()
     min_y = positions[:, 1].min()
@@ -52,14 +96,29 @@ def get_square_values(positions):
 
 @njit
 def quadrant_idx(pos, center):
-    # SW, SE, NW, NE -> 0, 1, 2, 3
+    """
+    Returns Quadrant index of the object at position: pos
+
+    SW, SE, NW, NE -> 0, 1, 2, 3
+    """
     return int(pos[0] >= center[0]) | (int(pos[1] >= center[1]) << 1)
 
 
 @njit
-def allocate_node(qt: QuadTree, half, center_pos, depth):
+def allocate_node(qt: QuadTree, half: np.float64, center_pos, depth: int):
+    """
+    Allocates node by adding it's square valuse and depth, node still needs to be inserted
+
+    Parameters
+    ----------
+    center_pos 
+        Takes one (x, y) coordinates of square's center position
+    """
     i = qt.size[0]
     if i == -1:
+        return -1
+
+    if i >= qt.half.shape[0]:
         return -1
 
     qt.size[0] = i + 1
@@ -71,7 +130,10 @@ def allocate_node(qt: QuadTree, half, center_pos, depth):
 
 
 @njit
-def child_square_values(half, center_pos, q_idx):
+def child_square_values(half: np.float64, center_pos, q_idx: int):
+    """
+    Finds and returns new square values created in a given quadrant
+    """
     new_half = half / 2
     # q_idx = quadrant_idx(pos, center_pos)
     new_center_pos = center_pos + np.array(
@@ -85,14 +147,23 @@ def child_square_values(half, center_pos, q_idx):
 
 
 @njit
-def insert_node(qt, node, body, pos, masses, max_depth):
+def insert_node(qt: QuadTree, node: int, body: int, pos: Float64Vec2D, masses: Float64Vec1D, max_depth: int):
     """
+    Allocates and inserts node's values:
+
+    - body_idx
+    - position
+    - body's mass
+    - and generates square values in the tree
+    - and gives current depth to that node
+
     Parameters
     ----------
     node : int64
         node index, start from root - entry point
     body : int64
         body index - ith index of the body that's being inserted
+    pos: 
     """
 
     # 1) if node body is empty no body and is leaf
@@ -112,6 +183,12 @@ def insert_node(qt, node, body, pos, masses, max_depth):
                 qt.mass[node] * qt.com_pos[node] + masses[body] * pos[body]
             ) / m
             qt.mass[node] = m
+            # TODO: body_idx, in the leaf node is still only one,
+            # when body_idx is checked for a particular point between another node it will just ignore the whole aggregate
+            # of that leaf node, increasing the error
+            # so:
+            # 1) The first particle ignores the entire aggregate, including all other particles in that leaf.
+            # 2) Other particles interact with the aggregate containing themselves, introducing self-interaction
             return True
 
         old_body = qt.body_idx[node]
@@ -135,7 +212,7 @@ def insert_node(qt, node, body, pos, masses, max_depth):
 
 
 @njit
-def compute_mass(qt: QuadTree, node_idx):
+def compute_mass(qt: QuadTree, node_idx: int):
     if qt.is_leaf[node_idx] == True:
         return
 
@@ -153,7 +230,10 @@ def compute_mass(qt: QuadTree, node_idx):
 
 
 @njit
-def populate_tree(qt, pos, masses, max_depth):
+def populate_tree(qt: QuadTree, pos: Float64Vec2D, masses: Float64Vec1D, max_depth: int):
+    """
+    Populates the tree with positions and masses
+    """
     half, center_pos = get_square_values(pos)
     qt.size[0] = 0
     root_idx = allocate_node(qt, half, center_pos, depth=0)
@@ -193,6 +273,7 @@ def node_acc(qt: QuadTree, node_idx, body_idx, pos, theta):
 
 @njit(parallel=True)
 def calculate_acc(qt, root_idx, acc, pos, theta, R, soft_bounding):
+    # updates acc array in place no need to return
     N = acc.shape[0]
     for i in prange(N):
         acc[i] = node_acc(qt, root_idx, i, pos, theta)
@@ -207,7 +288,10 @@ def calculate_acc(qt, root_idx, acc, pos, theta, R, soft_bounding):
                 acc[i] -= k * (r - R) * hat_n
 
 
-def build_tree(pos, masses, max_nodes: int, max_depth):
+def build_tree(pos: Float64Vec2D, masses: Float64Vec1D, max_nodes: int, max_depth: int):
+    """
+    Initialisation of tree SoA and its population
+    """
     while True:
         qt = zeros_tree(max_nodes)
         used = populate_tree(qt, pos, masses, max_depth)
@@ -216,10 +300,19 @@ def build_tree(pos, masses, max_nodes: int, max_depth):
         max_nodes *= 2
 
 
-from simulation import MassFunc, PosFunc, Simulation, VelFunc
+#########################
+# Simulation Exec Class #
+#########################
+from simulations.base_sim import MassFunc, PosFunc, Simulation, VelFunc
 
 
-class FlatBHutSim(Simulation):
+class FlatBHut2DSim(Simulation):
+    """
+    Barnes-Hut implementation using structure of arrays (SoA)
+    
+    It utilizes numba jit-supported functions to support faster calculations 
+    and paralellisation of the calculations.
+    """
     def __init__(
         self,
         N: int,
@@ -229,15 +322,23 @@ class FlatBHutSim(Simulation):
         theta: float,
         max_depth: int,
         soft_bounding: bool = True,
-        pos_func=None,
-        vel_func=None,
-        mass_func=None,
+        pos_func: Optional[PosFunc] = None,
+        vel_func: Optional[VelFunc] = None,
+        mass_func: Optional[MassFunc] = None,
     ) -> None:
         super().__init__(N, dt, dims, R, pos_func, vel_func, mass_func)
 
         self.theta = theta
         self.max_depth = max_depth
         self.soft_bounding = soft_bounding
+
+        temp_qt, self.max_nodes = build_tree(
+            self.pos, self.masses, self.N * 4, self.max_depth
+        )
+        calculate_acc(
+            temp_qt, 0, self.acc, self.pos, self.theta, self.R, self.soft_bounding
+        )
+        del temp_qt
 
     def step(self) -> None:
         dt = self.dt

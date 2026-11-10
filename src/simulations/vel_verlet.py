@@ -1,6 +1,10 @@
 import numpy as np
 from numba import jit
-from simulation import Simulation
+from simulations.base_sim import Simulation
+
+########################
+# JIT Helper Functions #
+########################
 
 
 @jit(nopython=True)
@@ -31,37 +35,42 @@ def _calculate_acc(pos, acc, mass, R):
 
     # Adding soft boundary
     for i in range(len(pos)):
-        k = 1  # stifness coefficient in F_boundry = -k(r- R)*n_vector, where n_vector is pos_vector / r
+        k = 1  # stiffness coefficient in F_boundary = -k(r- R)*n_vector, where n_vector is pos_vector / r
 
-        r = np.linalg.norm(pos[i])  # euclidian norm, distnace
+        r = np.linalg.norm(pos[i])  # euclidean norm, distance
 
         if r >= R:
             hat_n = pos[i] / r
 
             acc[i] -= k * (r - R) * hat_n
             # mass division is pointless, as heavier objects will
-            # fly further out the boundary - which is not the behaviour I want
+            # fly further out the boundary - which is not the behavior I want
 
 
 @jit(nopython=True)
 def _step(pos, vel, acc, mass, dt, R):
 
-    # Calculating positons at t + dt
+    # Calculating positions at t + dt
     for i in range(len(pos)):
         pos[i] += vel[i] * dt + 0.5 * acc[i] * dt**2
 
-    # Velocitites at t + dt/2
+    # Velocities at t + dt/2
     for i in range(len(pos)):
         vel[i] += 0.5 * acc[i] * dt
 
     # Calculating accelerations at t + dt
     _calculate_acc(pos, acc, mass, R)
 
-    # Velocitites at t + dt/2
+    # Velocities at t + dt/2
     for i in range(len(pos)):
         vel[i] += 0.5 * acc[i] * dt
 
     return pos, vel
+
+
+#########################
+# Simulation Exec Class #
+#########################
 
 
 class VelVerletSim(Simulation):
@@ -88,5 +97,4 @@ class VelVerletSim(Simulation):
 
 # TODO: 1) Add different interesting initialisation setups
 # TODO: 2) decide between Plummer-style gravitational softening or clumping method that was before
-# TODO: 3) Rewrite default initial setup, as this one is still chaotic
-# TODO: 4) Add docstring for NBodySim init method
+

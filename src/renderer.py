@@ -6,7 +6,7 @@ import matplotlib.colors as mcolors
 import vispy.scene
 from vispy.scene import visuals
 from vispy import app
-from simulation import Simulation
+from simulations.base_sim import Simulation
 
 CANVAS_SIZE = (512, 512)
 
@@ -66,7 +66,8 @@ def run_nbody_simulation(
     bounds: bool = True,
     canvas_size: tuple = (512, 512),
 ):
-    """Entry point to running the N-body simulation with VisPy rendering.
+    """
+    Entry point to running the N-body simulation with VisPy rendering.
 
      Parameters
     ----------
@@ -192,7 +193,7 @@ if __name__ == "__main__":
     import sys
 
     if sys.flags.interactive != 1:
-        from vel_verlet import VelVerletSim
+        from simulations.vel_verlet import VelVerletSim
 
         sim = VelVerletSim(N=100, dt=0.001, dims=2, R=50)
         run_nbody_simulation(sim=sim, save=False)

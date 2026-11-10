@@ -1,9 +1,10 @@
 import numpy as np
 from typing import Optional, List
-from simulation import MassFunc, PosFunc, VelFunc, Simulation
+from simulations.base_sim import MassFunc, PosFunc, VelFunc, Simulation
 
-
-
+#########################
+# Simulation Exec Class #
+#########################
 class Node:
     def __init__(self, centre_pos: np.ndarray, half: float, depth: int) -> None:
         self.centre_pos = centre_pos
@@ -63,7 +64,7 @@ class BarnesHutSim(Simulation):
         )
         child = Node(centre_pos, new_half, node.depth + 1)
         node.children[c] = child
-        return child # redundant perhaps, if not used 
+        return child  # redundant perhaps, if not used
 
     def _insert(self, node: Node, i: int) -> None:
         if node.is_leaf and node.body is None:

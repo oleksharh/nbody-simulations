@@ -3,35 +3,26 @@ import numpy.typing as npt
 from abc import ABC, abstractmethod
 from typing import Callable, Optional, Union
 
-Vec3D = npt.NDArray[np.float64]  # shape (N, 3)
-Vec2D = npt.NDArray[np.float64]  # shape (N, dims)
-Vec1D = npt.NDArray[np.float64]  # shape (N,)
+from type_defs import Float64Vec1D, Float64Vec2D, Float64Vec3D
 
-
-PosFunc = Callable[["Simulation"], Union[Vec2D, Vec3D]]
-VelFunc = Callable[["Simulation"], Union[Vec2D, Vec3D]]
-MassFunc = Callable[["Simulation"], Vec1D]
+PosFunc = Callable[["Simulation"], Union[Float64Vec2D, Float64Vec3D]]
+VelFunc = Callable[["Simulation"], Union[Float64Vec2D, Float64Vec3D]]
+MassFunc = Callable[["Simulation"], Float64Vec1D]
 
 
 class Simulation(ABC):
     """
     Parameters
     ----------
-    N: int
-        Bodies quantity
-    dt: float
-        time delta
-
+    N : int
+    dt : float
+    dims : int
+    R : int
+    pos : Union[Float64Vec2D, Float64Vec3D]
+    vel : Union[Float64Vec2D, Float64Vec3D]
+    acc : Union[Float64Vec2D, Float64Vec3D]
+    masses : Float64Vec1D
     """
-
-    N: int
-    dt: float
-    dims: int
-    R: int
-    pos: Union[Vec2D, Vec3D]
-    vel: Union[Vec2D, Vec3D]
-    acc: Union[Vec2D, Vec3D]
-    masses: Vec1D
 
     def __init__(
         self,
@@ -51,11 +42,17 @@ class Simulation(ABC):
         self.dims = dims
         self.R = R
 
-        self.pos = pos_func(self) if pos_func else self._default_positions()
-        self.masses = mass_func(self) if mass_func else self._default_masses()
-        self.vel = vel_func(self) if vel_func else self._default_velocities()
+        self.pos: Union[Float64Vec2D, Float64Vec3D] = (
+            pos_func(self) if pos_func else self._default_positions()
+        )
+        self.masses: Float64Vec1D = (
+            mass_func(self) if mass_func else self._default_masses()
+        )
+        self.vel: Union[Float64Vec2D, Float64Vec3D] = (
+            vel_func(self) if vel_func else self._default_velocities()
+        )
 
-        self.acc = np.zeros_like(
+        self.acc: Union[Float64Vec2D, Float64Vec3D] = np.zeros_like(
             self.pos
         )  # same as np.zeros((self.N, self.dims), dtype=np.float64)
 
@@ -113,4 +110,8 @@ class Simulation(ABC):
 
     @abstractmethod
     def step(self) -> None:
+        """
+        Step method, updates self.pos and self.vel attributes
+        every timestep.
+        """
         pass

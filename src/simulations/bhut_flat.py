@@ -38,7 +38,8 @@ class QuadTree(NamedTuple):
         (max_nodes,) int64    -1 means no body index reference is present
     child_indices : Int64Vec4D
         (max_nodes, 4) int64  -1 means no body index reference is present
-
+    next_idx : Int64Vec1D
+        Array with indices pointing to original body_idx - implicit idx of body in the pos, masses, acc, vel arrays of Sim class
     """
 
     size: Int64Vec1D
@@ -51,11 +52,13 @@ class QuadTree(NamedTuple):
     body_idx: Int64Vec1D
     child_indices: Int64Vec4D
 
+    next_idx: Int64Vec1D
 
-def zeros_tree(max_nodes: int) -> QuadTree:
+
+def zeros_tree(max_nodes: int, n_count: int) -> QuadTree:
     """
     Initialises QuadTree SoA to initial values,
-    essentially allocates arrays in memory and 
+    essentially allocates arrays in memory and
     returns QuadTree object
     """
     return QuadTree(
@@ -70,6 +73,9 @@ def zeros_tree(max_nodes: int) -> QuadTree:
         child_indices=np.full(
             (max_nodes, 4), fill_value=-1, dtype=int64
         ),  # implicit idx (this is the quadrant) of the index pointing (filled index) to the node
+        next_idx=np.full(
+            n_count, fill_value=-1, dtype=int64
+        ),  # implicit original body_idx used to create an implicit linked list
     )
 
 
@@ -111,7 +117,7 @@ def allocate_node(qt: QuadTree, half: np.float64, center_pos, depth: int):
 
     Parameters
     ----------
-    center_pos 
+    center_pos
         Takes one (x, y) coordinates of square's center position
     """
     i = qt.size[0]
@@ -147,7 +153,14 @@ def child_square_values(half: np.float64, center_pos, q_idx: int):
 
 
 @njit
-def insert_node(qt: QuadTree, node: int, body: int, pos: Float64Vec2D, masses: Float64Vec1D, max_depth: int):
+def insert_node(
+    qt: QuadTree,
+    node: int,
+    body: int,
+    pos: Float64Vec2D,
+    masses: Float64Vec1D,
+    max_depth: int,
+):
     """
     Allocates and inserts node's values:
 
@@ -163,7 +176,7 @@ def insert_node(qt: QuadTree, node: int, body: int, pos: Float64Vec2D, masses: F
         node index, start from root - entry point
     body : int64
         body index - ith index of the body that's being inserted
-    pos: 
+    pos:
     """
 
     # 1) if node body is empty no body and is leaf
@@ -183,12 +196,13 @@ def insert_node(qt: QuadTree, node: int, body: int, pos: Float64Vec2D, masses: F
                 qt.mass[node] * qt.com_pos[node] + masses[body] * pos[body]
             ) / m
             qt.mass[node] = m
-            # TODO: body_idx, in the leaf node is still only one,
-            # when body_idx is checked for a particular point between another node it will just ignore the whole aggregate
-            # of that leaf node, increasing the error
-            # so:
-            # 1) The first particle ignores the entire aggregate, including all other particles in that leaf.
-            # 2) Other particles interact with the aggregate containing themselves, introducing self-interaction
+
+            # bodies that fall into the same quadrant create an implicit linked list
+            if qt.body_idx[node] != -1:
+                qt.next_idx[body] = qt.body_idx[node]
+                qt.body_idx[node] = (
+                    body  # this will be a head ptr of the implicit linked list
+                )
             return True
 
         old_body = qt.body_idx[node]
@@ -230,7 +244,9 @@ def compute_mass(qt: QuadTree, node_idx: int):
 
 
 @njit
-def populate_tree(qt: QuadTree, pos: Float64Vec2D, masses: Float64Vec1D, max_depth: int):
+def populate_tree(
+    qt: QuadTree, pos: Float64Vec2D, masses: Float64Vec1D, max_depth: int
+):
     """
     Populates the tree with positions and masses
     """
@@ -250,33 +266,48 @@ def populate_tree(qt: QuadTree, pos: Float64Vec2D, masses: Float64Vec1D, max_dep
 
 
 @njit
-def node_acc(qt: QuadTree, node_idx, body_idx, pos, theta):
-    if qt.mass[node_idx] == 0.0 or (
-        qt.is_leaf[node_idx] == True and qt.body_idx[node_idx] == body_idx
-    ):
+def node_acc(qt: QuadTree, node_idx, body_idx, pos, masses, theta):
+    if qt.mass[node_idx] == 0.0:
         return np.zeros(2)
+
+    epsilon = 0.5
+
+    if qt.is_leaf[node_idx]:
+        total = np.zeros(2)
+
+        j = qt.body_idx[
+            node_idx
+        ]  # iterating over the linked list to see if is body_idx in there to be ignored
+        # ignoring aggregate mass in case there is body_idx in there
+        while j != -1:
+            if j != body_idx:
+                r_vec = pos[j] - pos[body_idx]
+                r_sq = r_vec @ r_vec
+
+                total += masses[j] * r_vec / (r_sq + epsilon**2) ** 1.5
+
+            j = qt.next_idx[j]
+
+        return total
 
     r_vec = qt.com_pos[node_idx] - pos[body_idx]
     r_sq = r_vec @ r_vec
-
-    epsilon = 0.5
-    if qt.is_leaf[node_idx] == True or (2 * qt.half[node_idx]) ** 2 < theta**2 * r_sq:
+    if (2 * qt.half[node_idx]) ** 2 < theta**2 * r_sq:
         return qt.mass[node_idx] * r_vec / (r_sq + epsilon**2) ** 1.5
 
     total = np.zeros(2)
     for ch_idx in qt.child_indices[node_idx]:
         if ch_idx >= 0:
-            total += node_acc(qt, ch_idx, body_idx, pos, theta)
-
+            total += node_acc(qt, ch_idx, body_idx, pos, masses, theta)
     return total
 
 
 @njit(parallel=True)
-def calculate_acc(qt, root_idx, acc, pos, theta, R, soft_bounding):
+def calculate_acc(qt, root_idx, acc, pos, masses, theta, R, soft_bounding):
     # updates acc array in place no need to return
     N = acc.shape[0]
     for i in prange(N):
-        acc[i] = node_acc(qt, root_idx, i, pos, theta)
+        acc[i] = node_acc(qt, root_idx, i, pos, masses, theta)
 
     if soft_bounding:
         k = 1.0
@@ -293,7 +324,7 @@ def build_tree(pos: Float64Vec2D, masses: Float64Vec1D, max_nodes: int, max_dept
     Initialisation of tree SoA and its population
     """
     while True:
-        qt = zeros_tree(max_nodes)
+        qt = zeros_tree(max_nodes, len(pos))
         used = populate_tree(qt, pos, masses, max_depth)
         if used >= 0:
             return qt, max_nodes
@@ -309,10 +340,11 @@ from simulations.base_sim import MassFunc, PosFunc, Simulation, VelFunc
 class FlatBHut2DSim(Simulation):
     """
     Barnes-Hut implementation using structure of arrays (SoA)
-    
-    It utilizes numba jit-supported functions to support faster calculations 
+
+    It utilizes numba jit-supported functions to support faster calculations
     and paralellisation of the calculations.
     """
+
     def __init__(
         self,
         N: int,
@@ -336,7 +368,14 @@ class FlatBHut2DSim(Simulation):
             self.pos, self.masses, self.N * 4, self.max_depth
         )
         calculate_acc(
-            temp_qt, 0, self.acc, self.pos, self.theta, self.R, self.soft_bounding
+            temp_qt,
+            0,
+            self.acc,
+            self.pos,
+            self.masses,
+            self.theta,
+            self.R,
+            self.soft_bounding,
         )
         del temp_qt
 
@@ -347,5 +386,14 @@ class FlatBHut2DSim(Simulation):
         qt, self.max_nodes = build_tree(
             self.pos, self.masses, self.N * 4, self.max_depth
         )
-        calculate_acc(qt, 0, self.acc, self.pos, self.theta, self.R, self.soft_bounding)
+        calculate_acc(
+            qt,
+            0,
+            self.acc,
+            self.pos,
+            self.masses,
+            self.theta,
+            self.R,
+            self.soft_bounding,
+        )
         self.vel += 0.5 * self.acc * dt

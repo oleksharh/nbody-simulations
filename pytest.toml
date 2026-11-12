@@ -1,0 +1,6 @@
+[pytest]
+minversion = "9.0"
+addopts = ["-ra", "-q"]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["slow: long-running tests"]

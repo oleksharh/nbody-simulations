@@ -18,6 +18,3 @@ run_nbody_simulation(
     bounds=True,
     canvas_size=(800, 600),
 )
-
-# TODO: Need to add testing pipeline of some sort to check if Sim classes conform to the abstract class,
-# whether renderer works and doesn't throw and error

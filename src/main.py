@@ -23,10 +23,10 @@ from simulations.bhut_flat import FlatBHut2DSim
 from simulations.vel_verlet import VelVerletSim
 from rendering import ParticleState, ParticleRenderer, SimWorker 
 
-# sim = VelVerletSim(N=50, dt=0.01, dims=2, R=100)
+# sim = VelVerletSim(N=2000, dt=0.01, dims=3, R=100)
 
 
-sim = FlatBHut2DSim(N=1_000, dt=0.01, dims=2, R=30, theta=0.5, max_depth=10, soft_bounding=False)
+sim = FlatBHut2DSim(N=5_000, dt=0.001, dims=2, R=1, theta=0.3, max_depth=10, soft_bounding=False)
 
 state = ParticleState()
 

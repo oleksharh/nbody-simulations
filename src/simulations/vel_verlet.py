@@ -1,5 +1,5 @@
 import numpy as np
-from numba import jit
+from numba import jit, prange
 from simulations.base_sim import Simulation
 
 ########################
@@ -7,14 +7,14 @@ from simulations.base_sim import Simulation
 ########################
 
 
-@jit(nopython=True)
+@jit(nopython=True, parallel=True)
 def _calculate_acc(pos, acc, mass, R):
     acc[:] = 0.0
 
-    for i in range(len(pos)):
+    for i in prange(len(pos)):
         pos_i = pos[i]
         mass_i = mass[i]
-        for j in range(i + 1, len(pos)):
+        for j in prange(i + 1, len(pos)):
             pos_j = pos[j]
             mass_j = mass[j]
 
@@ -34,7 +34,7 @@ def _calculate_acc(pos, acc, mass, R):
             acc[j] -= mass_i * factor
 
     # Adding soft boundary
-    for i in range(len(pos)):
+    for i in prange(len(pos)):
         k = 1  # stiffness coefficient in F_boundary = -k(r- R)*n_vector, where n_vector is pos_vector / r
 
         r = np.linalg.norm(pos[i])  # euclidean norm, distance
@@ -47,22 +47,22 @@ def _calculate_acc(pos, acc, mass, R):
             # fly further out the boundary - which is not the behavior I want
 
 
-@jit(nopython=True)
+@jit(nopython=True, parallel=True)
 def _step(pos, vel, acc, mass, dt, R):
 
     # Calculating positions at t + dt
-    for i in range(len(pos)):
+    for i in prange(len(pos)):
         pos[i] += vel[i] * dt + 0.5 * acc[i] * dt**2
 
     # Velocities at t + dt/2
-    for i in range(len(pos)):
+    for i in prange(len(pos)):
         vel[i] += 0.5 * acc[i] * dt
 
     # Calculating accelerations at t + dt
     _calculate_acc(pos, acc, mass, R)
 
     # Velocities at t + dt/2
-    for i in range(len(pos)):
+    for i in prange(len(pos)):
         vel[i] += 0.5 * acc[i] * dt
 
     return pos, vel

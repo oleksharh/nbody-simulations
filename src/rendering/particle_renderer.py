@@ -3,6 +3,8 @@ import numpy as np
 import vispy.scene
 from vispy.scene import visuals
 from vispy import app
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 class ParticleRenderer:
     def __init__(self, state, dims=2, canvas_size=(900, 700)):
@@ -13,21 +15,29 @@ class ParticleRenderer:
         # Metrics tracking
         self.render_frame_count = 0
         self.sim_tick_count = 0
-        self.fps_update_interval = 0.5  # Update title every 0.5 seconds
+        self.fps_update_interval = 0.5
         self.last_metrics_time = time.time()
         
         self.current_fps = 0.0
         self.current_tps = 0.0
 
+        cmap_colors = [
+            (0.00, "#3d018b"),
+            (0.35, "#ff007f"),
+            (0.75, "#00f3ff"),
+            (1.00, "#ffffff"),
+        ]
+        self.custom_cmap = mcolors.LinearSegmentedColormap.from_list("neon_cyber", cmap_colors)
+
         self.canvas = vispy.scene.SceneCanvas(
             keys="interactive",
             show=True,
             size=canvas_size,
-            bgcolor="black",
+            bgcolor="#0e0718",
         )
 
         self.view = self.canvas.central_widget.add_view()
-        self.view.camera = "panzoom" if dims == 2 else "turntable"
+        self.view.camera = "panzoom" if dims == 2 else "arcball"
 
         self.scatter = visuals.Markers()
         self.view.add(self.scatter)
@@ -39,21 +49,19 @@ class ParticleRenderer:
         )
 
     def update(self, event=None):
-        # 1. Count every single render pass for FPS
         self.render_frame_count += 1
 
-        # 2. Try reading the latest state from the simulation worker
         snapshot, version = self.state.read()
 
-        # Check if the simulation worker actually produced a NEW step
+
         if snapshot is not None and version != self.last_version:
-            self.sim_tick_count += 1  # Count unique simulation updates
+            self.sim_tick_count += 1
             self.last_version = version
             
-            # Unpack snapshot data
+
             pos, mass, vel = snapshot
 
-            # Compute colors and sizes
+
             speed = np.linalg.norm(vel, axis=1)
             max_speed = speed.max()
             if max_speed > 0:
@@ -61,11 +69,8 @@ class ParticleRenderer:
             else:
                 normalised = np.zeros_like(speed)
 
-            colors = np.empty((len(pos), 4), dtype=np.float32)
-            colors[:, 0] = normalised
-            colors[:, 1] = 0.3
-            colors[:, 2] = 1.0 - normalised
-            colors[:, 3] = 1.0
+
+            colors = self.custom_cmap(normalised).astype(np.float32)
 
             log_mass = np.log10(np.maximum(mass, 1e-30))
             mass_range = np.ptp(log_mass)

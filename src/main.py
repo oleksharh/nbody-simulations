@@ -1,45 +1,28 @@
 import os
-os.environ["NUMBA_NUM_THREADS"] = "24"
 
-# from simulations.vel_verlet import VelVerletSim
-# from simulations.bhut import BarnesHutSim
-from simulations.bhut_flat import FlatBHut2DSim
-# from renderer import run_nbody_simulation
+# Sets 75% of available threads to be utilised by the force solvers
+cpu_count = os.cpu_count() or 1
+worker_count = max(1, int(cpu_count * 0.75))
 
-# # nbody_sim = VelVerletSim(N=100, dt=0.01, dims=3, R=10)
-
-# # nbody_sim = BarnesHutSim(N=50, dt=0.01, dims=2, R=50, max_depth=10)
-
-# nbody_sim = FlatBHut2DSim(N=5_000, dt=0.01, dims=2, R=3, theta=0.7, max_depth=10, soft_bounding=False)
-
-# run_nbody_simulation(
-#     nbody_sim,
-#     render_decoupl_rng=1,
-#     bounds=True,
-#     canvas_size=(800, 600),
-# )
+os.environ["NUMBA_NUM_THREADS"] = str(worker_count)
 
 
-from simulations.vel_verlet import VelVerletSim
-from rendering import ParticleState, ParticleRenderer, SimWorker 
+# os.environ["NUMBA_NUM_THREADS"] = "Set your own value instead"
+#################################################################
 
-# sim = VelVerletSim(N=2000, dt=0.01, dims=3, R=100)
+from simulations import DirectSum, FlatBHut2DSim
+from rendering import render
 
+# sim = DirectSum(N=2000, dt=0.01, dims=3, R=100)
 
-sim = FlatBHut2DSim(N=5_000, dt=0.001, dims=2, R=1, theta=0.3, max_depth=10, soft_bounding=False)
+sim = FlatBHut2DSim(
+    N=5_000,
+    dt=0.001,
+    dims=2,
+    R=5,
+    theta=0.7,
+    max_depth=7,
+    soft_bounding=False
+)
 
-state = ParticleState()
-
-state.publish(sim.pos, sim.masses, sim.vel)
-
-worker = SimWorker(sim, state)
-renderer = ParticleRenderer(state, dims=sim.dims)
-
-worker.start()
-
-try:
-    renderer.run()
-finally:
-    worker.stop()
-    worker.join()
-    renderer.close()
+render(sim)

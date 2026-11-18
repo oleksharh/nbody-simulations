@@ -12,6 +12,8 @@ MassFunc = Callable[["Simulation"], Float64Vec1D]
 
 class Simulation(ABC):
     """
+    Base Abstract Class used to conform to shared rules
+
     Parameters
     ----------
     N : int

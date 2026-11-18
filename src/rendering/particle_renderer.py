@@ -40,6 +40,7 @@ class ParticleRenderer:
         self.view.camera = "panzoom" if dims == 2 else "arcball"
 
         self.scatter = visuals.Markers()
+        self.scatter.antialias = 0
         self.view.add(self.scatter)
 
         self.timer = app.Timer(

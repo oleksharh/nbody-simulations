@@ -1,15 +1,12 @@
 import numpy as np
 import pytest
 import math
-from simulations.base_sim import Simulation
-from simulations.vel_verlet import VelVerletSim
-from simulations.bhut_flat import build_tree, calculate_acc, FlatBHut2DSim
-
+from simulations import Simulation, DirectSum, FlatBHut2DSim, build_tree, calculate_acc
 
 @pytest.fixture(
     params=[
-        lambda: VelVerletSim(N=100, dt=0.01, dims=2, R=5),
-        lambda: VelVerletSim(N=100, dt=0.01, dims=3, R=5),
+        lambda: DirectSum(N=100, dt=0.01, dims=2, R=5),
+        lambda: DirectSum(N=100, dt=0.01, dims=3, R=5),
         lambda: FlatBHut2DSim(
             N=10000, dt=0.01, dims=2, R=3, theta=0.7, max_depth=10, soft_bounding=True
         ),

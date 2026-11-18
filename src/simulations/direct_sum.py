@@ -73,7 +73,11 @@ def _step(pos, vel, acc, mass, dt, R):
 #########################
 
 
-class VelVerletSim(Simulation):
+class DirectSum(Simulation):
+    """
+    Direct Summations O(N^2) implementation of the nbody problem
+    """
+
     def __init__(
         self,
         N: int,
